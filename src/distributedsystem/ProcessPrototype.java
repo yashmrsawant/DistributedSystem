@@ -10,33 +10,67 @@ import java.util.List;
 /**
  *
  * @author Yash M Sawant
+ * 
+ * 
+ * ProcessPrototype and extended Classes make extensive use of java concept of 
+ * aliasing. 
  */
+
+
+class ProcessSystem {
+    
+    private ProcessClass[] processSystem;
+    private int processSystemLength;
+    ProcessSystem(int processSystemLength) {
+        processSystem = new ProcessClass[processSystemLength];
+        this.processSystemLength = processSystemLength;
+    }
+    public void buildProcessHavingPID(int pID) {
+        processSystem[pID] = new ProcessClass(pID, this);
+    }
+    public ProcessClass getProcessHavingPID(int pID) {
+        return processSystem[pID];
+    }
+    public int getProcessSystemLength() {
+        return processSystemLength;
+    }
+}
 interface ProcessPrototype extends Runnable {
-    public void sendMessage(ProcessClass process, Event event, int eventId);
-    public void receiveMessage(ProcessClass from, Event event, int eventId);
+    public void sendMessage(ProcessSystem processSystem, 
+            int pID, Event event, int eventId);
+    public void receiveMessage(ProcessSystem processSystem,
+            int pID, Event event, int eventId);
 }
 class ProcessClass implements ProcessPrototype {
 
     /**
-     * Be aware synchronization problem
+     * Be aware of synchronization problem
      */
     private int pID;
     private int eventIDCounter;
     private List<Event> eventSequence;
-    public void setEventSequence(int processSystemLength, 
+    private ProcessSystem processSystem;
+    public void setEventSequence(
             EventType eventType) {
+        /**
+         * For an empty event
+         */
         eventSequence.add(new distributedsystem.Event(
-                processSystemLength, eventType));
+                processSystem.getProcessSystemLength(), eventType));
     }
-    public void setEventSequence(ProcessClass[] processSystem,
-            int referringProcessID, EventType eventType) {
+    public void setEventSequence(EventType eventType, int referringProcessID) {
+        /**
+         *  For an event having EventType "SEND" OR "RECEIVE"
+         */
         assert (processSystem != null);
         assert (referringProcessID > 0);
-        eventSequence.add(new distributedsystem.Event(
-                processSystem, referringProcessID, eventType));
+        eventSequence.add(
+                new distributedsystem.Event(processSystem.
+                    getProcessSystemLength(), referringProcessID, eventType));
     }
 
-    ProcessClass(int pID) {
+    ProcessClass(int pID, ProcessSystem processSystem) {
+        this.processSystem = processSystem;
         this.pID = pID;
         this.eventSequence = new ArrayList<>();
     }
@@ -49,31 +83,41 @@ class ProcessClass implements ProcessPrototype {
         this.eventIDCounter = 0;
         for (Event event : eventSequence) {
             event.logicalClockSequence[this.pID] =
-                    eventIDCounter += 1;
+                    eventIDCounter + 1;
             if (event.getEventType() == EventType.RECEIVE) {
                 this.receiveMessage(
-                        event.getReferringProcess(), event, eventIDCounter);
+                        processSystem,
+                        event.getReferringProcessID(), event, eventIDCounter);
             } else {
                 this.sendMessage(
-                        event.getReferringProcess(), event, eventIDCounter);
+                        processSystem, event.getReferringProcessID(), event, eventIDCounter);
             }
             eventIDCounter++;
         }
     }
 
     @Override
-    public void sendMessage(ProcessClass toProcess, Event event, int eventId) {
-        toProcess.receiveMessage(this, event, eventId);
+    public void sendMessage(ProcessSystem processSystem, int pID, Event event, 
+        int eventId) {
+        processSystem.getProcessHavingPID(pID).
+                receiveMessage(processSystem, this.pID, event, eventId);
     }
 
     @Override
     public void receiveMessage(
-            ProcessClass fromProcess, Event event, int eventId) {
-        if (this.eventSequence.get(eventIDCounter).logicalClockSequence[this.pID] 
-                < fromProcess.eventSequence.get(eventId).
+            ProcessSystem processSystem, int pID, Event event, int eventID) {
+        assert(eventIDCounter <= this.eventSequence.size());
+        assert(eventID <= processSystem.getProcessHavingPID(pID).
+                eventSequence.size());
+        ProcessClass fromProcess = processSystem.getProcessHavingPID(pID);
+
+        if (this.eventSequence.get(eventIDCounter).
+                logicalClockSequence[this.pID] < fromProcess.
+                eventSequence.get(eventID).
                 logicalClockSequence[fromProcess.pID]) {
-            this.eventSequence.get(eventIDCounter).logicalClockSequence[this.pID] 
-                    = fromProcess.eventSequence.get(eventId).
+            this.eventSequence.get(eventIDCounter).
+                    logicalClockSequence[this.pID] 
+                    = fromProcess.eventSequence.get(eventID).
                     logicalClockSequence[fromProcess.pID];
         }
     }
@@ -83,36 +127,34 @@ class Event {
      * process corresponds to referring process
      * eventType corresponds receivingFrom or sendingTo
      */
-    public Event(
-            ProcessClass[] processSystem, int processID, EventType eventType) {
-        assert(processID >= 0);
-        this.process = processSystem[processID];
+    public Event(int processSystemLength, int pID, EventType eventType) {
+        assert(pID >= 0);
+        this.pID = pID;
         this.eventType = eventType;
-        this.logicalClockSequence = new int[processSystem.length];
+        this.logicalClockSequence = new int[processSystemLength];
     }
+    /**
+     * For an event labeled "NOTHING"
+     * @param processSystemLength
+     * @param eventType 
+     */
     public Event(
-            int processSystemLength, EventType eventType) {
+        int processSystemLength, EventType eventType) {
         this.eventType = eventType;
         this.logicalClockSequence = new int[processSystemLength];
     }
     public int[] getLogicalClockSequence() {
         return logicalClockSequence;
     }
-    private ProcessClass process;
+    private int pID;
     
     private EventType eventType;
     int[] logicalClockSequence;
     public EventType getEventType() {
         return eventType;
     }
-    public void setEventType(EventType event) {
-        this.eventType = event; 
-    }
-    public ProcessClass getReferringProcess() {
-        return process;
-    }
-    public void setReferringProcess(ProcessClass process) {
-        this.process = process;
+    public int getReferringProcessID() {
+        return this.pID;
     }
 }
 enum EventType {
